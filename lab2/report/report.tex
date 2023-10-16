@@ -1,0 +1,139 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=20mm,
+ top=20mm,
+ }
+
+\graphicspath{ {./images/} }
+
+\author{Michał Stefanik}
+\date{\today}
+\title{Raport z zadania 2. - Konwolucyjne sieci neuronowe}
+
+
+
+\begin{document}
+
+\maketitle
+% Your content here
+\section{Co trzeba było zrobić?}
+
+Zapoznanie się z technikami klasyfikacji obrazów sieciami konwolucyjnymi.
+
+\section{Zbiór danych}
+
+Zbiór danych na których przeprowadzałem ćwiczenie to połącznie MNIST z FashionMnist.
+Do każdego obrazka z MNIST zostały dodane dwa obrazki z FashionMnist - jeden z lewej strony,
+drugi z prawej strony. Lewy obrazek był w kolejności takiej jak w oryginalnym zbiorze,
+prawy pochodził z tego samego zbioru, ale po losowej permutacji. W zależności od
+parzystości liczby, jako oznaczenie rekordu została wybierana klasa obrazka
+lewego (dla parzystych) lub prawego (dla nieparzystych). Kod tworzenia takiego
+zbioru danych pokazany jest na listingu poniżej.
+
+\begin{lstlisting}[language=Python]
+def shuffle_dataset(dataset):
+    random_permutation = torch.randperm(len(dataset))
+    return dataset.data[random_permutation], dataset.targets[random_permutation]
+
+
+def generate_dataset(dataset_1, dataset_2):
+    left_data = dataset_1.data
+    left_labels = dataset_1.targets
+
+    right_data, right_labels = shuffle_dataset(dataset_1)
+
+    center_data = dataset_2.data
+    center_labels = dataset_2.targets
+
+    data = (
+        torch.cat((left_data, center_data, right_data), 2)
+        .float()
+        .unsqueeze(1)
+        .to(device)
+    )
+    data = data / 255
+    labels = torch.where(center_labels % 2 == 0, left_labels, right_labels).to(device)
+    return torch.utils.data.TensorDataset(data, labels)
+    
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{training_mnist.png}
+    \caption{Przykładowe obrazki z MNIST}
+    \label{fig:mnist}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{training_fashion_mnist.png}
+    \caption{Przykładowe obrazki z FashionMNIST}
+    \label{fig:fashion}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{train_dataset.png}
+    \caption{Przykładowe obrazki z połączonego zbioru danych}
+    \label{fig:dataset}
+\end{figure}
+
+
+\section{Model}
+
+Model składa się z trzech warstw konwolucyjnych oraz dwóch warstw w pełni połączonych.
+Jako funkcji aktywacji użyto ReLU. Jak funkcji straty użyto CrossEntropyLoss. Optimizerem
+był Adam. Dokładne wartości parametrów modelu pokazane są na listingu poniżej.
+
+
+\begin{lstlisting}[language=Python]
+    model = torch.nn.Sequential(
+    torch.nn.Conv2d(1, 32, 3),
+    torch.nn.ReLU(),
+    torch.nn.MaxPool2d(2),
+    torch.nn.Conv2d(32, 64, 3),
+    torch.nn.ReLU(),
+    torch.nn.MaxPool2d(2),
+    torch.nn.Conv2d(64, 64, 3),
+    torch.nn.ReLU(),
+    torch.nn.MaxPool2d(2),
+    torch.nn.Flatten(),
+    torch.nn.Dropout(0.5),
+    torch.nn.Linear(512, 32),
+    torch.nn.ReLU(),
+    torch.nn.Linear(32, 10),
+)
+\end{lstlisting}
+
+\section{Wyniki}
+
+Po 15 epokach z $learning\_rate=0.001$ oraz $batch=128$ osiągnięto dokładność
+na zbiorze testowym $78.33\%$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{test_acc.png}
+    \caption{Wykres dokładności na zbiorze testowym}
+    \label{fig:loss}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{test_dataset.png}
+    \caption{Obrazki z przewidzianymi klasami}
+    \label{fig:loss}
+\end{figure}
+
+
+
+
+\end{document}
