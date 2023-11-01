@@ -1,0 +1,208 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=20mm,
+ top=20mm,
+ }
+
+\graphicspath{ {./images/} }
+
+\author{Michał Stefanik}
+\date{\today}
+\title{Raport z zadania 3. - Generative Adversarial Networks}
+
+\begin{document}
+
+\maketitle
+\section{Wstęp}
+Do wykonania zadania używałem języka Python 3.10.13
+z biblioteką PyTorch 2.1.0.
+\section{Model dyskryminatora}
+
+\begin{lstlisting}[language=python]
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=2)
+        self.norm1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=2)
+        self.norm2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=2)
+        self.norm3 = nn.BatchNorm2d(128)
+        self.flatten = nn.Flatten()
+        self.linear1 = nn.Linear(3200, 1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.norm1(x)
+        x = F.leaky_relu(x, 0.2)
+        x = self.conv2(x)
+        x = self.norm2(x)
+        x = F.leaky_relu(x, 0.2)
+        x = self.conv3(x)
+        x = self.norm3(x)
+        x = F.leaky_relu(x, 0.2)
+        x = self.flatten(x)
+        x = F.dropout(x, 0.5)
+        x = self.linear1(x)
+        x = F.sigmoid(x)
+        return x
+\end{lstlisting}
+
+\section{Model generatora}
+
+\begin{lstlisting}[language=python]
+class Generator(nn.Module):
+    def __init__(self):
+        super(Generator, self).__init__()
+        self.linear1 = nn.Linear(64, 64 * 4 * 4)
+        self.conv1 = nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=1)
+        self.conv2 = nn.ConvTranspose2d(64, 128, kernel_size=4, stride=2, padding=1)
+        self.conv3 = nn.ConvTranspose2d(128, 256, kernel_size=4, stride=2, padding=1)
+        self.conv4 = nn.Conv2d(256, 3, kernel_size=5, stride=1, padding=2)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = x.view(-1, 64, 4, 4)
+        x = self.conv1(x)
+        x = F.leaky_relu(x, 0.2)
+        x = self.conv2(x)
+        x = F.leaky_relu(x, 0.2)
+        x = self.conv3(x)
+        x = F.leaky_relu(x, 0.2)
+        x = self.conv4(x)
+        x = torch.tanh(x)
+        return x
+\end{lstlisting}
+
+Bez żadnego treningu, generator generuje obrazki przypominające szum. Przykład takigo obrazka wygenerowanego
+z użyciem wektorów o wartościach z rozkładu normalnego standardowego na rysunku \ref{fig:noise}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{noise.png}
+    \caption{Przykładowy obrazek wygenerowany przez generator bez treningu}
+    \label{fig:noise}
+\end{figure}
+
+
+\section{Zbiór danych}
+
+Zbiór danych to dostarczone przez prowadzącego zdjęcia ciast marchewkowych.
+Przykładowe zdjęcia zostały pokazane na rysunku \ref{fig:true_images_sample}.
+Zdjęcia zostały przeskalowane do rozmiary 32 x 32, a ich wartości
+przeskalowane do zakresu [-1, 1].
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{true_images_sample.png}
+    \caption{Przykładowe zdjęcia ciast marchewkowych}
+    \label{fig:true_images_sample}
+\end{figure}
+
+\section{Przygotowanie się do działania z optimizerem}
+
+Żeby mieć pewność, że optimizer będzie zmieniał tylko wagi dyskryminatora,
+a nie generatora, zrobiłem mały ekspertyment. Na listingu \ref{lst:minimodel}
+umieściłem kod prostego modelu z dwoma warstwami. Następnie stworzyłem
+optimizer, który będzie optymalizował tylko pierwszą warstwę. Po wykonaniu
+jednego i więcej kroków optymalizacji, wagi drugiej warstwy nie zmieniły się.
+Wiemy więc, że optimizer zmienia jedynie wagi, które mu podamy jako parametr.
+
+\begin{lstlisting}[language=python,label={lst:minimodel},caption={Eksperyment z optimizerem}]
+class Minimodel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.lin = nn.Linear(2, 2)
+        self.lin2 = nn.Linear(2, 2)
+
+    def forward(self, x):
+        x = self.lin(x)
+        x = self.lin2(x)
+        return x
+
+
+minimodel = Minimodel()
+input_val = torch.randn(10, 2)
+loss_fn = lambda x: ((x - 42) ** 2).sum()
+optimizer = torch.optim.SGD(minimodel.lin.parameters(), lr=0.01)
+
+pred = minimodel(input_val)
+loss = loss_fn(pred)
+loss.backward()
+optimizer.step()
+\end{lstlisting}
+
+Po wykonaniu kilku takich kroków wartość loss spadła znacząco, a wartości wyniku
+modelu zbliżyły się do 42.
+
+\section{Trening}
+Do treningu zostały użyte następujące hiperparametry:
+\begin{lstlisting}[language=python,caption={Parametry treningu}]
+discriminator = Discriminator().to(device)
+generator = Generator().to(device)
+
+lrd = 0.00001
+lrg = 0.000015
+betas = (0.5, 0.999)
+
+discriminator_optimizer = torch.optim.Adam(
+    discriminator.parameters(), lr=lrd, betas=betas
+)
+generator_optimizer = torch.optim.Adam(
+    generator.parameters(), lr=lrg, betas=betas
+)
+\end{lstlisting}
+
+\subsection{Trening dyskryminatora}
+
+Trening dyskryminatora składa się z dwóch części. W pierwszej części na wejściu
+podajemy mu prawdziwe obrazki, które oznaczamy jako prawdziwe. W drugiej części
+podajemy mu obrazki wygenerowane przez generator, które oznaczamy jako fałszywe.
+Po zebraniu gradientu z obu części, wykonujemy jeden krok optymalizacji wag dyskryminatora.
+
+
+\begin{lstlisting}[language=python]
+# train discriminator on true images
+discriminator_optimizer.zero_grad()
+pred1 = discriminator(image_batch)
+target = torch.ones((pred1.shape[0], 1), device=device)
+loss1 = F.binary_cross_entropy(pred1, target)
+loss1.backward()
+
+# train discriminator on generated images
+pred2 = discriminator.forward(
+    generator.forward(torch.randn(16, 64, device=device))
+)
+target = torch.zeros((pred2.shape[0], 1), device=device)
+loss2 = F.binary_cross_entropy(pred2, target)
+loss2.backward()
+
+discriminator_optimizer.step()
+disc_losses.append((loss1 + loss2).item()/2)
+\end{lstlisting}
+
+\subsection{Trening generatora}
+
+\begin{lstlisting}[language=python]
+# train generator
+generator_optimizer.zero_grad()
+batch = generator.forward(torch.randn(16, 64, device=device))
+pred = discriminator(batch)
+target = torch.ones((pred.shape[0], 1), device=device)
+loss = F.binary_cross_entropy(pred, target)
+loss.backward()
+generator_optimizer.step()
+gen_losses.append(loss.item())
+\end{lstlisting}
+
+
+\end{document}
