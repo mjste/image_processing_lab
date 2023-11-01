@@ -192,6 +192,10 @@ disc_losses.append((loss1 + loss2).item()/2)
 
 \subsection{Trening generatora}
 
+Trening generatora polegał na podaniu wygenerowanych przez niego obrazków
+do dyskryminatora i oznaczeniu ich jako prawdziwe. Następnie zebraniu gradientu
+i wykonaniu jednego kroku optymalizacji wag generatora.
+
 \begin{lstlisting}[language=python]
 # train generator
 generator_optimizer.zero_grad()
@@ -203,6 +207,155 @@ loss.backward()
 generator_optimizer.step()
 gen_losses.append(loss.item())
 \end{lstlisting}
+
+\subsection{Monitoring modelu}
+
+W celu monitorowania modelu co kilkadziesiat epok zapisywałem średnią
+wartość funkcji loss dla dyskryminatora i generatora. Wyniki zostały
+pokazane na rysunku \ref{fig:losses}. Oprócz kosztu zapisywałem też
+obrazki wygenerowane przez generator dla kilku stałych wektorów wejściowych.
+Zostały one zaprezentowane na rysunkach \ref{fig:100}, \ref{fig:500},
+\ref{fig:1000} i \ref{fig:2000}. Dalszy trening nie przynosił znaczących
+zmian w wizualnej jakości generowanych obrazków. Wartośći funkcji loss
+zaczęły się znacząco różnić od siebie.
+
+
+%% Tutaj wstawiony obrazek z lossami
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{losses.png}
+    \caption{Wartości funkcji loss dla dyskryminatora i generatora}
+    \label{fig:losses}
+\end{figure}
+
+%% Tutaj obrazek po 100 epokach
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{epoch_100.png}
+    \caption{Obrazki wygenerowane przez generator po 100 epokach}
+    \label{fig:100}
+\end{figure}
+
+%% Tutaj obrazek po 500 epokach
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{epoch_500.png}
+    \caption{Obrazki wygenerowane przez generator po 500 epokach}
+    \label{fig:500}
+\end{figure}
+
+%% Tutaj obrazek po 1000 epokach
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{epoch_1000.png}
+    \caption{Obrazki wygenerowane przez generator po 1000 epokach}
+    \label{fig:1000}
+\end{figure}
+
+%% Tutaj obrazek po 2000 epokach
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{epoch_2000.png}
+    \caption{Obrazki wygenerowane przez generator po 2000 epokach}
+    \label{fig:2000}
+\end{figure}
+
+\section{Dopasowanie wejściowego wektora do obrazka}
+
+Do tego celu użyłem modelu po 2000 epokach. W celu znalezienia wektora
+wejściowego, obliczyłem gradient funkcji loss względem wektora wejściowego.
+Wyniki dopasowania zostały pokazane na rysunku \ref{fig:fitting}.
+Kod optymalizacji znajduje się na listingu \ref{lst:fitting}. Na rysunku
+\ref{fig:fitting_evolution} została pokazana ewolucja obrazka od przypadkowego
+do dopasowanego. Na rysunku \ref{fig:fitting_varying} zostały pokazane obrazki
+wygenerowane z wektora wejściowego ze zmienianą jedną wartością.
+
+
+
+\begin{lstlisting}[language=python,caption={Dopasowanie wektora wejściowego do obrazka},label={lst:fitting}]
+input_vector = torch.randn(1, 64, device=device, requires_grad=True)
+target_image = true_images_dataset[0]
+
+image_optim = torch.optim.SGD([input_vector], lr=0.01, momentum=0.9)
+loss_fn = lambda x: ((x - target_image) ** 2).sum()
+
+for i in range(100):
+    image_optim.zero_grad()
+    result = generator.forward(input_vector)
+    loss = loss_fn(result)
+    loss.backward()
+    image_optim.step()
+    
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{target_initial_result.png}
+    \caption{Dopasowanie wektora wejściowego do obrazka}
+    \label{fig:fitting}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{intermediate_results.png}
+    \caption{Ewolucja obrazka od przypadkowego do dopasowanego}
+    \label{fig:fitting_evolution}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{changing_parameters.png}
+    \caption{Obrazki wygenerowane z wektora wejściowego ze zmienianą jedną wartością}
+    \label{fig:fitting_varying}
+\end{figure}
+
+Dodatkowo procedura ta została powtórzona dla innego obrazka (grumpy cat),
+niezwiązanego z ciastem marchewkowym. Wyniki zostały pokazane
+na rysunku \ref{fig:fitting_other}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{intermediate_cat_results.png}
+    \caption{Dopasowanie wektora wejściowego do innego obrazka}
+    \label{fig:fitting_other}
+\end{figure}
+
+\section{Interpolacja między obrazkami}
+
+Ostatnim zadaniem było wygenerowanie interpolacji między dwoma obrazkami.
+W tym celu do dwóch obrazków zostały dopasowane wektory wejściowe. Następnie
+wygenerowano kilka obrazków leżących na linii w hiperpłaszczyźnie rozpiętej
+na wektorach wejściowych. Wyniki zostały pokazane na rysunku \ref{fig:interpolation}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{intermediate_results_2.png}
+    \caption{Interpolacja między obrazkami}
+    \label{fig:interpolation}
+\end{figure}
+
+\section{Wnioski i uwagi do zadania}
+
+Zadanie na pewno satysfakcjonujące. Udało się wygenerować obrazki, które
+jak się dobrze przypatrzy to przypominają ciasta marchewkowe. Niestety
+nie udało się wygenerować obrazków, które byłyby jak dla mnie dobre jakościowo.
+Dobór hiperparametrów był na pewno kluczowy do uzyskania dobrych wyników,
+na co zeszło sporo czasu. Wartości funkcji loss dla dyskryminatora i generatora
+zaczęły się znacząco różnić od siebie, co przyznam, że mnie zaskoczyło. Starałem
+się to ograniczyć przez zmniejszenie współczynnika uczenia dyskryminatora,
+pomogło wydłużyć równowagę, ale nie całkowicie. Najdłużej trwało uczenie -
+w moim przypadku co najmniej 8 godzin, a fakt jakiegokolwiek uczenia było widać
+dopiero po co najmniej godzinie. Wyniki nie są tak piękne jak te przykładowe,
+ale może to być kwestia błędu w implementacji architektury sieci lub procesie uczenia.
+
+
+
+
+
+
+
 
 
 \end{document}
