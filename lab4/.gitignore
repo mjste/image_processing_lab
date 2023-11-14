@@ -1,0 +1,5 @@
+datasets/
+runs/
+metadata/
+yolov8n.pt
+downloader.py
