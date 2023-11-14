@@ -1,0 +1,8 @@
+path: .
+train: train_images
+val: validation_images
+test: test_images
+
+nc: 1
+names:
+  0: Food
