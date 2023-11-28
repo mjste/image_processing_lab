@@ -1,0 +1,171 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=20mm,
+ top=20mm,
+ }
+
+\graphicspath{ {./images/} }
+
+\author{Michał Stefanik}
+\date{\today}
+\title{Raport z zadania 5. - DDPM Diffussion Models}
+
+\begin{document}
+
+\maketitle
+\section{Wstęp}
+Do wykonania zadania używałem języka Python 3.10.13
+z biblioteką PyTorch 2.1.0.
+
+\section{Zadanie}
+
+Należało zaimplementować model dyfuzyjny działający na wektorach dwuwymiarowych.
+Zadaniem modelu, jest przesuwanie wektora o wartościach z rozkładu normalnego standardowego
+w takim kierunku by pokrywał się ze zbiorem danych wejściowych.
+
+Jako dane wejściowe został użyty zbiór punktów z płaszczyzny, reprezentowanych na
+rysunku \ref{fig:rower} przez niebieskie kropki.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{bicycle.png}
+    \caption{Model dyfuzyjny}
+    \label{fig:rower}
+\end{figure}
+
+\section{Dyfuzja}
+
+Pierwotny schemat wartości $\beta$ był zdefiniowany jako funkcja liniowa
+rosnąca od wartości $\beta_1 = 0.0001 $
+do $\beta_T = 0.02$ w $ T = 1000 $ krokach. Wartości $\alpha$ zostały wyliczone
+ze wzoru $\alpha_t = 1 - \beta_t $. Dalej potrzebne były wartości
+$ \overline{\alpha_t} = \prod_{i=1}^{t} \alpha_i $. Wykres wartości
+$\overline{\alpha_t}$ został pokazany na rysunku \ref{fig:alphacumprod_linear}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{alfacumprod_linear.png}
+    \caption{Wartości $\overline{\alpha_t}$}
+    \label{fig:alphacumprod_linear}
+\end{figure}
+
+Wykres ten zbyt wcześnie osiąga wartość 0, co powoduje, że uczenie jest mniej płynne.
+Żeby temu zapobiec, wartości $\overline{\alpha_t}$ zostały wzięte z wartości przeskalowanej
+funkcji sigmoidalnej z przedziału $[-5, 5]$. Na jej podstawie zostały wyliczone wartości
+$\alpha_t$ i $\beta_t$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{alfacumprod.png}
+    \caption{Wartości $\overline{\alpha_t}$}
+    \label{fig:alphacumprod_sigmoid}
+\end{figure}
+
+\section{Sprawdzenie poprawności modelu}
+
+Jedyne sprawdzenie poprawności modelu, to sprawdzenie czy dane wyjściowe modelu
+są takiego samego rozmiaru jak dane wejściowe. W tym celu użyłem poniższego kodu:
+
+\begin{lstlisting}[language=Python]
+model = DiffussionGenerator(0.0001, 0.02, timesteps=1000)
+random_input = torch.randn(10, 2)
+random_cond = torch.randint(0, 1000, (1,))
+result = model(random_input, random_cond)
+
+assert result.shape == random_input.shape
+\end{lstlisting}
+
+\section{Trening modelu}
+
+Podczas 2000 epok treningu modelu, funkcja kosztu spadała niewiele, co widać na rysunku \ref{fig:loss}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{mean_losses.png}
+    \caption{Wartości funkcji straty}
+    \label{fig:loss}
+\end{figure}
+
+\section{Przykładowe Odszumianie 5000 punktów}
+W tych wynikach użyty model został wytrenowany na 2000 epokach.
+
+% 500, 700, 900, 999
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_500.png}
+    \caption{Odszumianie 5000 punktów po 500 krokach}
+    \label{fig:sample_500}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_700.png}
+    \caption{Odszumianie 5000 punktów po 700 krokach}
+    \label{fig:sample_700}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_900.png}
+    \caption{Odszumianie 5000 punktów po 900 krokach}
+    \label{fig:sample_900}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_999.png}
+    \caption{Odszumianie 5000 punktów po 999 krokach}
+    \label{fig:sample_999}
+\end{figure}
+
+
+
+\section{Porównanie z wariantami modelu zapisanymi podczas treningu}
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_200_999.png}
+    \caption{Wynik generacji 5000 punktów na modelu trenowanym przez 200 epok}
+    \label{fig:sample_200_999}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_500_999.png}
+    \caption{Wynik generacji 5000 punktów na modelu trenowanym przez 500 epok}
+    \label{fig:sample_500_999}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_1000_999.png}
+    \caption{Wynik generacji 5000 punktów na modelu trenowanym przez 1000 epok}
+    \label{fig:sample_1000_999}
+\end{figure}
+
+Jak widać, funkcja loss, nie spadła zbyt mocno, a pomimo to jakość generacji znacząco się poprawiła.
+Być może dane zaszumiane były na zbyt mało sposobów, by model mógł się nauczyć ich odszumiać.
+Generowany szum był za każdym razem inny, więc model powoli się uczył, jak go odszumiać.
+Dodatkowo, może pomogłaby sieć o większej pojemności, która mogłaby się nauczyć bardziej skomplikowanych
+zależności.
+
+\section{Generacja 40000 punktów}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sample_40000_2000_999.png}
+    \caption{Wynik generacji 40000 punktów na modelu trenowanym przez 2000 epok}
+    \label{fig:sample_2000_999}
+\end{figure}
+
+\end{document}
